@@ -10,12 +10,11 @@ import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
 import scipy.stats as stats
-from scipy.stats import shapiro, levene, f_oneway, kruskal, ttest_ind
+from scipy.stats import shapiro, levene, f_oneway, kruskal
 from statsmodels.stats.multicomp import pairwise_tukeyhsd
-from statsmodels.stats.power import FTestAnovaPower, TTestPower
+from statsmodels.stats.power import FTestAnovaPower
 from statsmodels.formula.api import ols
 import statsmodels.api as sm
-from sklearn.utils import resample
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -31,7 +30,6 @@ st.markdown("""
     <style>
     .stApp { background-color: #f5f5f5; }
     h1 { color: #2E8B57; text-align: center; }
-    .sidebar .sidebar-content { background-color: #f0f2f6; }
     .design-card { 
         border-radius: 10px; 
         padding: 15px; 
@@ -47,7 +45,6 @@ st.markdown("""
     }
     .valid { background-color: #d4edda; border-left: 4px solid #28a745; }
     .invalid { background-color: #f8d7da; border-left: 4px solid #dc3545; }
-    .warning { background-color: #fff3cd; border-left: 4px solid #ffc107; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -55,21 +52,7 @@ st.markdown("""
 st.title("🥑 Diseño de Experimentos - Bioestimulantes en Aguacates")
 st.markdown("---")
 
-# Sidebar para navegación
-st.sidebar.header("Módulos de Análisis")
-app_mode = st.sidebar.selectbox(
-    "Selecciona el módulo",
-    [
-        "📋 Contexto & Datos", 
-        "🔍 Análisis Exploratorio", 
-        "📐 Diseño Experimental",
-        "📊 ANOVA & Comparaciones",
-        "✅ Validación Supuestos",
-        "⚡ Potencia Estadística"
-    ]
-)
-
-# Función para generar datos de ejemplo si no existen
+# Función para generar datos de ejemplo
 def generate_sample_data():
     """Genera datos de ejemplo para la demostración"""
     np.random.seed(42)
@@ -110,10 +93,39 @@ def load_data():
         return df
     except:
         df = generate_sample_data()
-        st.sidebar.warning("⚠️ Usando datos de ejemplo. Sube tu archivo 'datos_aguacate_masivos.csv'")
+        st.sidebar.info("📊 Usando datos de ejemplo. Sube tu archivo 'datos_aguacate_masivos.csv'")
         return df
 
-df = load_data()
+# Sidebar para navegación
+st.sidebar.header("Módulos de Análisis")
+app_mode = st.sidebar.selectbox(
+    "Selecciona el módulo",
+    [
+        "📋 Contexto & Datos", 
+        "🔍 Análisis Exploratorio", 
+        "📊 ANOVA & Comparaciones",
+        "✅ Validación Supuestos",
+        "⚡ Potencia Estadística"
+    ]
+)
+
+# Upload de archivo en sidebar
+st.sidebar.header("📁 Cargar Datos")
+uploaded_file = st.sidebar.file_uploader("Sube tu archivo CSV", type=["csv"])
+
+if uploaded_file is not None:
+    try:
+        df_uploaded = pd.read_csv(uploaded_file)
+        st.session_state.df = df_uploaded
+        st.sidebar.success("✅ Archivo cargado exitosamente!")
+    except Exception as e:
+        st.sidebar.error(f"❌ Error al cargar archivo: {e}")
+
+# Cargar datos (usar session_state para mantener entre reruns)
+if 'df' not in st.session_state:
+    st.session_state.df = load_data()
+
+df = st.session_state.df
 
 # Módulo 1: Contexto & Datos
 if app_mode == "📋 Contexto & Datos":
@@ -131,7 +143,7 @@ if app_mode == "📋 Contexto & Datos":
         **Diseño Experimental:**
         - Completamente aleatorizado (CRD)
         - 4 tratamientos
-        - 10 árboles por tratamiento (unidades experimentales)
+        - 10 árboles por tratamiento
         - 5 frutas medidas por árbol
         
         **Hipótesis:**
@@ -151,9 +163,9 @@ if app_mode == "📋 Contexto & Datos":
         | Total Observaciones | 200 |
         """)
         
-        st.metric("📊 Total de Árboles", 40)
+        st.metric("📊 Total de Árboles", df['Arbol_ID'].nunique())
         st.metric("🔢 Observaciones", len(df))
-        st.metric("📈 Grados de Libertad", "Trat: 3, Error: 36")
+        st.metric("📈 Tratamientos", df['Tratamiento'].nunique())
     
     st.markdown("---")
     
@@ -167,12 +179,6 @@ if app_mode == "📋 Contexto & Datos":
             'Hidrolizado de proteína para síntesis celular eficiente',
             'Ascophyllum nodosum para división celular acelerada',
             'Mejoradores de suelo y absorción de nutrientes'
-        ],
-        'Mecanismo Esperado': [
-            'Línea base',
-            'Ahorro energético en síntesis',
-            'Estimulación división celular',
-            'Mejora absorción nutrientes'
         ]
     }
     
@@ -182,8 +188,6 @@ if app_mode == "📋 Contexto & Datos":
     # Mostrar datos
     st.markdown("---")
     st.subheader("📁 Datos del Experimento")
-    
-    st.success("✅ Datos cargados exitosamente")
     
     # Estadísticas rápidas
     col1, col2, col3, col4 = st.columns(4)
@@ -224,8 +228,7 @@ elif app_mode == "🔍 Análisis Exploratorio":
         [
             "📈 Distribución por Tratamiento",
             "📊 Comparación de Medias", 
-            "📦 Boxplots Comparativos",
-            "🔍 Outliers & Valores Extremos"
+            "📦 Boxplots Comparativos"
         ]
     )
     
@@ -278,17 +281,6 @@ elif app_mode == "🔍 Análisis Exploratorio":
         ax.tick_params(axis='x', rotation=45)
         st.pyplot(fig)
         
-        # Coeficiente de variación
-        st.subheader("📏 Medidas de Variabilidad")
-        cv_data = []
-        for tratamiento in df['Tratamiento'].unique():
-            data = df[df['Tratamiento'] == tratamiento]['Peso_g']
-            cv = (data.std() / data.mean()) * 100
-            cv_data.append({'Tratamiento': tratamiento, 'CV (%)': round(cv, 2)})
-        
-        df_cv = pd.DataFrame(cv_data)
-        st.dataframe(df_cv)
-        
     elif analisis_type == "📦 Boxplots Comparativos":
         st.subheader("Comparación Visual entre Tratamientos")
         
@@ -309,123 +301,8 @@ elif app_mode == "🔍 Análisis Exploratorio":
         col1, col2 = st.columns(2)
         col1.metric("Estadístico F", f"{f_stat:.4f}")
         col2.metric("Valor p", f"{p_value:.4f}")
-        
-    elif analisis_type == "🔍 Outliers & Valores Extremos":
-        st.subheader("Detección de Outliers y Valores Extremos")
-        
-        # Método IQR
-        outliers_data = []
-        for tratamiento in df['Tratamiento'].unique():
-            data = df[df['Tratamiento'] == tratamiento]['Peso_g']
-            Q1 = data.quantile(0.25)
-            Q3 = data.quantile(0.75)
-            IQR = Q3 - Q1
-            lower_bound = Q1 - 1.5 * IQR
-            upper_bound = Q3 + 1.5 * IQR
-            
-            outliers = data[(data < lower_bound) | (data > upper_bound)]
-            outliers_data.append({
-                'Tratamiento': tratamiento,
-                'Outliers': len(outliers),
-                'Porcentaje': f"{(len(outliers)/len(data))*100:.1f}%",
-                'Valores': list(outliers.values) if len(outliers) > 0 else "Ninguno"
-            })
-        
-        df_outliers = pd.DataFrame(outliers_data)
-        st.dataframe(df_outliers)
 
-# Módulo 3: Diseño Experimental
-elif app_mode == "📐 Diseño Experimental":
-    st.header("📐 Diseño Experimental y Consideraciones")
-    
-    st.markdown("""
-    ### 🎯 Diseño Completamente Aleatorizado (CRD)
-    
-    **Estructura del Modelo:**
-    """)
-    
-    st.latex(r"Y_{ij} = \mu + \tau_i + \epsilon_{ij}")
-    
-    st.markdown("""
-    Donde:
-    - $Y_{ij}$: Peso de la fruta j en el tratamiento i
-    - $\mu$: Media general del peso
-    - $\tau_i$: Efecto del tratamiento i
-    - $\epsilon_{ij}$: Error experimental ∼ N(0, σ²)
-    """)
-    
-    # Consideraciones del diseño
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.markdown("""
-        ### ✅ Fortalezas del Diseño
-        
-        **Ventajas:**
-        - Aleatorización completa
-        - Simplicidad en implementación
-        - Fácil análisis estadístico
-        - Igual número de réplicas
-        """)
-    
-    with col2:
-        st.markdown("""
-        ### ⚠️ Limitaciones y Mejoras
-        
-        **Posibles Mejoras:**
-        - Bloqueo por posición en finca
-        - Covariables (edad árbol, producción previa)
-        - Medidas repetidas en el tiempo
-        - Mayor número de réplicas
-        """)
-    
-    st.markdown("---")
-    
-    # Tabla ANOVA esperada
-    st.subheader("📊 Tabla ANOVA Esperada")
-    
-    anova_esperada = {
-        'Fuente de Variación': ['Tratamientos', 'Error', 'Total'],
-        'Grados de Libertad': [3, 36, 39],
-        'Suma de Cuadrados': ['SCT', 'SCE', 'SCTotal'],
-        'Cuadrados Medios': ['CMT = SCT/3', 'CME = SCE/36', '-'],
-        'Estadístico F': ['F = CMT/CME', '-', '-']
-    }
-    
-    df_anova_esperada = pd.DataFrame(anova_esperada)
-    st.dataframe(df_anova_esperada, use_container_width=True)
-    
-    # Cálculo de potencia
-    st.subheader("⚡ Cálculo de Potencia del Diseño")
-    
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        efecto_esperado = st.slider("Tamaño del efecto esperado (f)", 0.1, 1.0, 0.5, 0.1)
-    
-    with col2:
-        alpha = st.slider("Nivel de significancia (α)", 0.01, 0.10, 0.05, 0.01)
-    
-    with col3:
-        n_grupos = st.number_input("Número de grupos", 2, 10, 4)
-    
-    # Calcular potencia
-    power_analysis = FTestAnovaPower()
-    potencia = power_analysis.solve_power(
-        effect_size=efecto_esperado,
-        nobs=10,
-        alpha=alpha,
-        k_groups=n_grupos
-    )
-    
-    st.metric("Potencia Estadística (1-β)", f"{potencia:.3f}")
-    
-    if potencia < 0.8:
-        st.warning("⚠️ Potencia insuficiente (< 0.8). Considera aumentar el tamaño muestral.")
-    else:
-        st.success("✅ Potencia adecuada para detectar el efecto")
-
-# Módulo 4: ANOVA & Comparaciones
+# Módulo 3: ANOVA & Comparaciones
 elif app_mode == "📊 ANOVA & Comparaciones":
     st.header("📊 Análisis de Varianza (ANOVA) y Comparaciones Múltiples")
     
@@ -491,46 +368,29 @@ elif app_mode == "📊 ANOVA & Comparaciones":
         No hay evidencia suficiente de diferencias entre los tratamientos.
         """)
     
-    # Análisis de efectos
-    st.subheader("📈 Análisis de Efectos")
+    # Gráfico de medias
+    st.subheader("📈 Medias por Tratamiento")
     
-    col1, col2 = st.columns(2)
+    fig, ax = plt.subplots(figsize=(10, 6))
+    medias = df.groupby('Tratamiento')['Peso_g'].mean()
+    errores = df.groupby('Tratamiento')['Peso_g'].sem()
     
-    with col1:
-        # Interpretación del tamaño del efecto
-        if eta_squared < 0.01:
-            interpretacion = "Muy pequeño"
-        elif eta_squared < 0.06:
-            interpretacion = "Pequeño"
-        elif eta_squared < 0.14:
-            interpretacion = "Mediano"
-        else:
-            interpretacion = "Grande"
-        
-        st.metric("Tamaño del Efecto", interpretacion)
+    bars = ax.bar(medias.index, medias.values, 
+                 yerr=errores.values, capsize=5, alpha=0.7,
+                 color=['skyblue', 'lightcoral', 'lightgreen', 'gold'])
     
-    with col2:
-        # Gráfico de medias
-        fig, ax = plt.subplots(figsize=(10, 6))
-        medias = df.groupby('Tratamiento')['Peso_g'].mean()
-        errores = df.groupby('Tratamiento')['Peso_g'].sem()
-        
-        bars = ax.bar(medias.index, medias.values, 
-                     yerr=errores.values, capsize=5, alpha=0.7,
-                     color=['skyblue', 'lightcoral', 'lightgreen', 'gold'])
-        
-        ax.set_title('Medias de Peso por Tratamiento')
-        ax.set_ylabel('Peso (g)')
-        ax.tick_params(axis='x', rotation=45)
-        
-        # Añadir valores en las barras
-        for bar, media in zip(bars, medias.values):
-            ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 2,
-                   f'{media:.1f}g', ha='center', va='bottom')
-        
-        st.pyplot(fig)
+    ax.set_title('Medias de Peso por Tratamiento')
+    ax.set_ylabel('Peso (g)')
+    ax.tick_params(axis='x', rotation=45)
+    
+    # Añadir valores en las barras
+    for bar, media in zip(bars, medias.values):
+        ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 2,
+               f'{media:.1f}g', ha='center', va='bottom')
+    
+    st.pyplot(fig)
 
-# Módulo 5: Validación Supuestos
+# Módulo 4: Validación Supuestos
 elif app_mode == "✅ Validación Supuestos":
     st.header("✅ Validación de Supuestos del ANOVA")
     
@@ -617,21 +477,9 @@ elif app_mode == "✅ Validación Supuestos":
         Considera:
         - Transformaciones de datos (log, sqrt)
         - Tests no paramétricos (Kruskal-Wallis)
-        - Modelos de efectos mixtos
         """)
-        
-        # Alternativas cuando supuestos fallan
-        st.subheader("🔄 Alternativas cuando los Supuestos Fallan")
-        
-        if p_sw <= 0.05:
-            st.info("**Para normalidad:** Prueba Kruskal-Wallis (no paramétrico)")
-            stat_kw, p_kw = kruskal(*grupos)
-            st.metric("Kruskal-Wallis p-value", f"{p_kw:.4f}")
-        
-        if p_lev <= 0.05:
-            st.info("**Para varianzas desiguales:** Prueba Welch o transformaciones")
 
-# Módulo 6: Potencia Estadística
+# Módulo 5: Potencia Estadística
 elif app_mode == "⚡ Potencia Estadística":
     st.header("⚡ Análisis de Potencia Estadística")
     
@@ -716,8 +564,6 @@ elif app_mode == "⚡ Potencia Estadística":
                label=f'Potencia deseada ({potencia_deseada})')
     ax.axvline(x=n_requerido, color='green', linestyle='--', alpha=0.7, 
                label=f'n requerido ({np.ceil(n_requerido):.0f})')
-    ax.axvline(x=n_grupo, color='blue', linestyle='--', alpha=0.7, 
-               label=f'n actual ({n_grupo})')
     
     ax.set_xlabel('Tamaño Muestral por Grupo')
     ax.set_ylabel('Potencia Estadística (1-β)')
@@ -731,24 +577,10 @@ elif app_mode == "⚡ Potencia Estadística":
 st.markdown("---")
 st.markdown(
     """
-    **🧪 Aplicación desarrollada para Diseño de Experimentos y Análisis Estadístico**  
+    **🧪 Aplicación desarrollada para Diseño de Experimentos**  
     *Métodos: ANOVA, Comparaciones Múltiples, Validación de Supuestos, Potencia*
     """
 )
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("🚀 Desarrollado para Análisis de Experimentos")
-
-# Upload de archivo en sidebar
-st.sidebar.header("📁 Cargar Datos")
-uploaded_file = st.sidebar.file_uploader("Sube tu archivo CSV", type=["csv"])
-
-if uploaded_file is not None:
-    try:
-        df_uploaded = pd.read_csv(uploaded_file)
-        df = df_uploaded
-        st.sidebar.success("✅ Archivo cargado exitosamente!")
-        st.rerun()
-    except Exception as e:
-        st.sidebar.error(f"❌ Error al cargar archivo: {e}")
-        
